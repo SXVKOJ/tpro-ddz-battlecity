@@ -2,8 +2,13 @@
 %TAG !u! tag:unity3d.com,2011:
 --- !u!78 &1
 TagManager:
-  serializedVersion: 2
-  tags: []
+  serializedVersion: 3
+  tags:
+  - Enemy
+  - Bullet
+  - Walls
+  - Steel Walls
+  - Map
   layers:
   - Default
   - TransparentFX
@@ -13,11 +18,11 @@ TagManager:
   - UI
   - 
   - 
-  - 
-  - 
-  - 
-  - 
-  - 
+  - Player
+  - Enemy
+  - Bullet
+  - Walls
+  - Map
   - 
   - 
   - 
@@ -41,3 +46,14 @@ TagManager:
   - name: Default
     uniqueID: 0
     locked: 0
+  - name: bullets
+    uniqueID: 3788046295
+    locked: 0
+  - name: foreground
+    uniqueID: 1343016863
+    locked: 0
+  - name: background
+    uniqueID: 3813515299
+    locked: 0
+  m_RenderingLayers:
+  - Default

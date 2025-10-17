@@ -5,30 +5,38 @@ public class EnemyAI : MonoBehaviour
     private enum AIState { Patrol, Chase, Attack, Escape }
     
     [Header("AI Settings")]
-    [SerializeField] private float detectionRange = 8f;
-    [SerializeField] private float attackRange = 5f;
-    [SerializeField] private float decisionInterval = 2f;
-    [SerializeField] private float patrolChangeInterval = 3f;
+    [SerializeField] private float detectionRange = 6f;
+    [SerializeField] private float attackRange = 4f;
+    [SerializeField] private float decisionInterval = 3f;
+    [SerializeField] private float patrolChangeInterval = 4f;
+    [SerializeField] private float shootingCooldown = 2f;
+    [SerializeField] private float chaseProbability = 0.7f; // Вероятность преследования вместо патруля
     
     private TankController tankController;
     private Transform player;
     private AIState currentState;
     private float nextDecisionTime;
     private float nextPatrolChangeTime;
+    private float nextShootTime;
     private Vector2 currentDirection;
+    private float stateChangeCooldown;
     
     private void Awake()
     {
         tankController = GetComponent<TankController>();
-        FindPlayer();
     }
     
     private void Start()
     {
+        FindPlayer();
+        
         // Начальное случайное направление
         currentDirection = GetRandomDirection();
         tankController.SetAIDirectionAndMove(currentDirection);
         nextPatrolChangeTime = Time.time + patrolChangeInterval;
+        nextShootTime = Time.time + 1f; // Задержка перед первой стрельбой
+        
+        Debug.Log($"🤖 Enemy spawned. Starting in Patrol mode.");
     }
     
     private void Update()
@@ -38,6 +46,7 @@ public class EnemyAI : MonoBehaviour
             FindPlayer();
         }
         
+        // Принимаем решения с интервалом
         if (Time.time >= nextDecisionTime)
         {
             MakeDecision();
@@ -49,8 +58,17 @@ public class EnemyAI : MonoBehaviour
         // Периодически меняем направление патрулирования
         if (Time.time >= nextPatrolChangeTime && currentState == AIState.Patrol)
         {
-            currentDirection = GetRandomDirection();
-            tankController.SetAIDirectionAndMove(currentDirection);
+            ChangePatrolDirection();
+            nextPatrolChangeTime = Time.time + patrolChangeInterval;
+        }
+        
+        // Случайная смена направления даже в режиме преследования (чтобы не был слишком прямолинейным)
+        if (currentState == AIState.Chase && Time.time >= nextPatrolChangeTime)
+        {
+            if (Random.Range(0f, 1f) < 0.3f) // 30% шанс сменить направление
+            {
+                ChangePatrolDirection();
+            }
             nextPatrolChangeTime = Time.time + patrolChangeInterval;
         }
     }
@@ -74,19 +92,41 @@ public class EnemyAI : MonoBehaviour
         
         float distanceToPlayer = Vector2.Distance(transform.position, player.position);
         
+        // Более сложная логика принятия решений
         if (distanceToPlayer <= attackRange)
         {
-            currentState = AIState.Attack;
-            tankController.StopAI(); // Останавливаемся для атаки
+            // В зоне атаки - атакуем с вероятностью
+            if (Random.Range(0f, 1f) < 0.8f) // 80% шанс атаки
+            {
+                currentState = AIState.Attack;
+                tankController.StopAI();
+            }
+            else
+            {
+                // Иногда отступаем даже в зоне атаки
+                currentState = AIState.Escape;
+            }
         }
         else if (distanceToPlayer <= detectionRange)
         {
-            currentState = AIState.Chase;
+            // В зоне обнаружения - решаем что делать
+            if (Random.Range(0f, 1f) < chaseProbability)
+            {
+                currentState = AIState.Chase;
+            }
+            else
+            {
+                // Иногда игнорируем игрока и продолжаем патруль
+                currentState = AIState.Patrol;
+            }
         }
         else
         {
+            // Вне зоны обнаружения - патрулируем
             currentState = AIState.Patrol;
         }
+        
+        Debug.Log($"🤖 Enemy: {currentState}, Distance: {distanceToPlayer:F1}");
     }
     
     private void ExecuteState()
@@ -110,56 +150,110 @@ public class EnemyAI : MonoBehaviour
     
     private void PatrolBehavior()
     {
-        // Продолжаем движение в текущем направлении
-        // Движение уже установлено в SetAIDirectionAndMove
-        
-        // Случайный выстрел
-        if (Random.Range(0f, 1f) < 0.02f)
+        // Просто продолжаем движение в текущем направлении
+        // Изредка стреляем наугад
+        if (Time.time >= nextShootTime && Random.Range(0f, 1f) < 0.01f)
         {
-            tankController.Shoot();
+            TryShoot();
         }
     }
     
     private void ChaseBehavior()
     {
+        // Более "ленивое" преследование - не всегда сразу к игроку
         Vector2 directionToPlayer = (player.position - transform.position).normalized;
-        Vector2 discreteDirection = GetDiscreteDirection(directionToPlayer);
         
-        if (discreteDirection != currentDirection)
+        // С вероятностью 70% двигаемся к игроку, 30% - случайное направление
+        if (Random.Range(0f, 1f) < 0.7f)
         {
-            currentDirection = discreteDirection;
-            tankController.SetAIDirectionAndMove(currentDirection);
+            Vector2 discreteDirection = GetDiscreteDirection(directionToPlayer);
+            if (discreteDirection != currentDirection)
+            {
+                currentDirection = discreteDirection;
+                tankController.SetAIDirectionAndMove(currentDirection);
+            }
         }
         
         // Стрельба во время преследования
-        if (Random.Range(0f, 1f) < 0.05f)
+        if (Time.time >= nextShootTime && Random.Range(0f, 1f) < 0.03f)
         {
-            tankController.Shoot();
+            TryShoot();
         }
     }
     
     private void AttackBehavior()
     {
-        // Останавливаемся и стреляем
-        // Остановка уже выполнена в MakeDecision()
-        
-        // Частая стрельба в режиме атаки
-        if (Random.Range(0f, 1f) < 0.1f)
+        // В режиме атаки иногда меняем позицию
+        if (Random.Range(0f, 1f) < 0.2f) // 20% шанс сдвинуться
         {
-            tankController.Shoot();
+            Vector2 dodgeDirection = GetRandomDirection();
+            tankController.SetAIDirectionAndMove(dodgeDirection);
+            
+            // Через 1 секунду возвращаемся к атаке
+            Invoke(nameof(ReturnToAttack), 1f);
+        }
+        
+        // Активная стрельба в режиме атаки
+        if (Time.time >= nextShootTime && Random.Range(0f, 1f) < 0.08f)
+        {
+            TryShoot();
+        }
+    }
+    
+    private void ReturnToAttack()
+    {
+        if (currentState == AIState.Attack)
+        {
+            tankController.StopAI();
         }
     }
     
     private void EscapeBehavior()
     {
-        // Бегство от игрока
+        // Бегство от игрока, но не всегда прямо от него
         Vector2 directionAwayFromPlayer = (transform.position - player.position).normalized;
-        Vector2 discreteDirection = GetDiscreteDirection(directionAwayFromPlayer);
         
-        if (discreteDirection != currentDirection)
+        // 60% - бегство от игрока, 40% - случайное направление
+        if (Random.Range(0f, 1f) < 0.6f)
         {
-            currentDirection = discreteDirection;
+            Vector2 discreteDirection = GetDiscreteDirection(directionAwayFromPlayer);
+            if (discreteDirection != currentDirection)
+            {
+                currentDirection = discreteDirection;
+                tankController.SetAIDirectionAndMove(currentDirection);
+            }
+        }
+        else
+        {
+            // Случайное направление бегства
+            ChangePatrolDirection();
+        }
+        
+        // Во время бегства тоже можно стрелять
+        if (Time.time >= nextShootTime && Random.Range(0f, 1f) < 0.02f)
+        {
+            TryShoot();
+        }
+    }
+    
+    private void ChangePatrolDirection()
+    {
+        Vector2 newDirection = GetRandomDirection();
+        
+        // Не меняем направление на противоположное (чтобы не ходить туда-сюда)
+        if (newDirection != -currentDirection || Random.Range(0f, 1f) < 0.3f)
+        {
+            currentDirection = newDirection;
             tankController.SetAIDirectionAndMove(currentDirection);
+        }
+    }
+    
+    private void TryShoot()
+    {
+        if (Time.time >= nextShootTime)
+        {
+            tankController.Shoot();
+            nextShootTime = Time.time + shootingCooldown + Random.Range(-0.5f, 0.5f); // Небольшая случайность
         }
     }
     
@@ -181,7 +275,8 @@ public class EnemyAI : MonoBehaviour
         float absX = Mathf.Abs(continuousDirection.x);
         float absY = Mathf.Abs(continuousDirection.y);
         
-        if (absX > absY)
+        // Предпочтение горизонтальному движению для более интересного поведения
+        if (absX > absY * 0.8f) // Небольшое предпочтение горизонтали
         {
             return continuousDirection.x > 0 ? Vector2.right : Vector2.left;
         }
@@ -189,5 +284,26 @@ public class EnemyAI : MonoBehaviour
         {
             return continuousDirection.y > 0 ? Vector2.up : Vector2.down;
         }
+    }
+    
+    // Визуализация зон в редакторе
+    private void OnDrawGizmosSelected()
+    {
+        // Зона обнаружения (желтая)
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, detectionRange);
+        
+        // Зона атаки (красная)
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, attackRange);
+        
+        // Текущее направление
+        Gizmos.color = Color.green;
+        Gizmos.DrawRay(transform.position, currentDirection * 1.5f);
+        
+        // Текущее состояние
+        #if UNITY_EDITOR
+        UnityEditor.Handles.Label(transform.position + Vector3.up * 2f, $"State: {currentState}");
+        #endif
     }
 }

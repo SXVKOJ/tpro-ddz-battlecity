@@ -82,7 +82,6 @@ public class TankController : MonoBehaviour
             if (IsMovingTowardBoundary(currentPosition, clampedPosition))
             {
                 StopMovement();
-                Debug.Log("🚫 Tank hit map boundary!");
             }
         }
     }

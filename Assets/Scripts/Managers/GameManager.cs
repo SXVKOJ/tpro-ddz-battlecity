@@ -10,6 +10,13 @@ public class GameManager : MonoBehaviour
     [SerializeField] private int playerScore = 0;
     [SerializeField] private int currentLevel = 1;
     
+    [Header("Enemy Settings")]
+    [SerializeField] private bool spawnEnemies = true;
+    [SerializeField] private int enemiesPerLevel = 20;
+    [SerializeField] private int maxActiveEnemies = 4;
+    [SerializeField] private float enemySpawnInterval = 5f;
+    [SerializeField] private GameObject enemyPrefab;
+    
     [Header("Map Boundaries")]
     [SerializeField] private SpriteRenderer mapSprite;
     [SerializeField] private Vector2 mapMinBounds = new Vector2(-10, -10);
@@ -21,11 +28,17 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Transform playerSpawnPoint;
     
     private GameObject currentPlayer;
+    private EnemySpawner enemySpawner;
     
-    // Публичные свойства для доступа к границам
+    // Публичные свойства для доступа к настройкам
     public Vector2 MapMinBounds => mapMinBounds;
     public Vector2 MapMaxBounds => mapMaxBounds;
     public bool UseMapBoundaries => useMapBoundaries;
+    public bool SpawnEnemies => spawnEnemies;
+    public int EnemiesPerLevel => enemiesPerLevel;
+    public int MaxActiveEnemies => maxActiveEnemies;
+    public float EnemySpawnInterval => enemySpawnInterval;
+    public GameObject EnemyPrefab => enemyPrefab;
     
     private void Awake()
     {
@@ -43,7 +56,55 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
+        InitializeGame();
         UpdateUI();
+    }
+    
+    private void InitializeGame()
+    {
+        // Создаем спавнер врагов если нужно
+        if (spawnEnemies && enemyPrefab != null)
+        {
+            CreateEnemySpawner();
+        }
+        else if (spawnEnemies && enemyPrefab == null)
+        {
+            Debug.LogWarning("⚠️ Spawn enemies is enabled but enemy prefab is not assigned!");
+        }
+    }
+    
+    private void CreateEnemySpawner()
+    {
+        // Создаем объект спавнера через код
+        GameObject spawnerObject = new GameObject("EnemySpawner");
+        enemySpawner = spawnerObject.AddComponent<EnemySpawner>();
+        
+        // Настраиваем спавн точки автоматически
+        CreateSpawnPoints();
+        
+        Debug.Log("🎯 Enemy spawner created successfully");
+    }
+    
+    private void CreateSpawnPoints()
+    {
+        if (enemySpawner == null || mapSprite == null) return;
+        
+        // Создаем точки спавна в верхней части карты
+        Bounds mapBounds = mapSprite.bounds;
+        float spawnY = mapBounds.max.y - 1f; // Отступ от верхнего края
+        
+        // Создаем несколько точек спавна по ширине карты
+        int spawnPointCount = 3;
+        float step = mapBounds.size.x / (spawnPointCount + 1);
+        
+        for (int i = 0; i < spawnPointCount; i++)
+        {
+            float spawnX = mapBounds.min.x + step * (i + 1);
+            Vector2 spawnPosition = new Vector2(spawnX, spawnY);
+            enemySpawner.AddSpawnPoint(spawnPosition);
+        }
+        
+        Debug.Log($"📍 Created {spawnPointCount} spawn points automatically");
     }
     
     private void CalculateMapBounds()
@@ -73,8 +134,46 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning("⚠️ GameManager: Map sprite not found, using default bounds");
         }
     }
+
+    // Где-то в вашем коде
+    public void SpawnSingleEnemy()
+    {
+        if (SpawnEnemies && EnemyPrefab != null)
+        {
+            Vector2 spawnPosition = new Vector2(Random.Range(-MapMinBounds.x, MapMaxBounds.x), 8f);
+            GameObject enemy = Instantiate(EnemyPrefab, spawnPosition, Quaternion.identity);
+            Debug.Log("🤖 Single enemy spawned programmatically");
+        }
+    }
     
-    // Метод для принудительного обновления границ (при смене уровня)
+    // Методы для динамического изменения настроек
+    public void SetEnemySpawning(bool enable)
+    {
+        spawnEnemies = enable;
+        if (enemySpawner != null)
+        {
+            enemySpawner.gameObject.SetActive(enable);
+        }
+    }
+    
+    public void SetEnemiesPerLevel(int count)
+    {
+        enemiesPerLevel = count;
+        if (enemySpawner != null)
+        {
+            enemySpawner.SetTotalEnemies(count);
+        }
+    }
+    
+    public void SetMaxActiveEnemies(int count)
+    {
+        maxActiveEnemies = count;
+        if (enemySpawner != null)
+        {
+            enemySpawner.SetMaxEnemies(count);
+        }
+    }
+    
     public void UpdateMapBounds(SpriteRenderer newMapSprite)
     {
         mapSprite = newMapSprite;
@@ -131,7 +230,8 @@ public class GameManager : MonoBehaviour
     private void UpdateUI()
     {
         // Здесь будет обновление UI
-        Debug.Log($"Lives: {playerLives}, Score: {playerScore}");
+        int enemiesRemaining = enemySpawner != null ? enemySpawner.EnemiesRemaining : 0;
+        Debug.Log($"Lives: {playerLives}, Score: {playerScore}, Enemies: {enemiesRemaining}");
     }
     
     private void GameOver()

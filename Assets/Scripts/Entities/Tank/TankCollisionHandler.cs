@@ -21,9 +21,6 @@ public class TankCollisionHandler : MonoBehaviour
             case "Enemy":
                 HandleEnemyCollision(collision);
                 break;
-            case "Bullet":
-                // Обрабатывается в триггере
-                break;
             case "Water":
                 HandleWaterCollision();
                 break;
@@ -36,9 +33,6 @@ public class TankCollisionHandler : MonoBehaviour
         
         switch (triggerTag)
         {
-            case "Bullet":
-                HandleBulletCollision(other);
-                break;
             case "PowerUp":
                 HandlePowerUpCollision(other);
                 break;
@@ -69,24 +63,6 @@ public class TankCollisionHandler : MonoBehaviour
         
         // Нанести урон
         tankController.TakeDamage(10);
-    }
-    
-    private void HandleBulletCollision(Collider2D bullet)
-    {
-        Bullet bulletComponent = bullet.GetComponent<Bullet>();
-        if (bulletComponent != null) 
-        {
-            // Проверяем, что пуля принадлежит противнику
-            bool isEnemyBullet = bulletComponent.IsEnemyBullet;
-            bool isPlayerTank = tankController.IsPlayer;
-            
-            // Игрок получает урон от вражеских пуль, враги - от игрока
-            if ((isEnemyBullet && isPlayerTank) || (!isEnemyBullet && !isPlayerTank))
-            {
-                tankController.TakeDamage(bulletComponent.Damage);
-                Destroy(bullet.gameObject);
-            }
-        }
     }
     
     private void HandlePowerUpCollision(Collider2D powerUp)

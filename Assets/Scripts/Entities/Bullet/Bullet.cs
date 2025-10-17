@@ -10,14 +10,16 @@ public class Bullet : MonoBehaviour
     private Vector2 direction;
     private bool isEnemyBullet;
     private float spawnTime;
+    private GameObject owner; // Добавляем ссылку на владельца пули
     
     public bool IsEnemyBullet => isEnemyBullet;
     public int Damage => damage;
     
-    public void Initialize(Vector2 dir, bool enemyBullet)
+    public void Initialize(Vector2 dir, bool enemyBullet, GameObject bulletOwner = null)
     {
         direction = dir;
         isEnemyBullet = enemyBullet;
+        owner = bulletOwner;
         spawnTime = Time.time;
 
         // Визуальное отличие пуль врага и игрока
@@ -56,7 +58,6 @@ public class Bullet : MonoBehaviour
                 currentPosition.y < minBounds.y || currentPosition.y > maxBounds.y)
             {
                 DestroyBullet();
-                Debug.Log("🚫 Bullet hit map boundary!");
             }
         }
     }
@@ -77,6 +78,10 @@ public class Bullet : MonoBehaviour
         
         Debug.Log($"💥 Bullet hit: {otherTag} - {other.gameObject.name}");
         
+        // Игнорируем столкновения с владельцем пули
+        if (owner != null && other.gameObject == owner)
+            return;
+            
         // Игнорируем столкновения с объектами того же типа
         if ((isEnemyBullet && otherTag == "Enemy") || (!isEnemyBullet && otherTag == "Player"))
             return;
@@ -120,9 +125,49 @@ public class Bullet : MonoBehaviour
     
     private void HandleTankCollision(Collider2D tank)
     {
-        // Урон наносится в TankCollisionHandler
+        Debug.Log($"🎯 Processing tank collision: {tank.tag}, EnemyBullet: {isEnemyBullet}");
+        
+        // Проверяем, должна ли пуля наносить урон этому танку
+        bool shouldDamage = false;
+        
+        if (isEnemyBullet && tank.CompareTag("Player"))
+        {
+            // Вражеская пуля попадает в игрока
+            shouldDamage = true;
+            Debug.Log("💥 Enemy bullet hit player!");
+        }
+        else if (!isEnemyBullet && tank.CompareTag("Enemy"))
+        {
+            // Пуля игрока попадает во врага
+            shouldDamage = true;
+            Debug.Log("💥 Player bullet hit enemy!");
+        }
+        
+        if (shouldDamage)
+        {
+            // Наносим урон танку
+            TankController tankController = tank.GetComponent<TankController>();
+            if (tankController != null)
+            {
+                Debug.Log($"💢 Dealing {damage} damage to {tank.name}");
+                tankController.TakeDamage(damage);
+            }
+            else
+            {
+                Debug.LogError($"❌ TankController not found on {tank.name}");
+                
+                // Альтернативный способ получить TankController
+                tankController = tank.GetComponentInParent<TankController>();
+                if (tankController != null)
+                {
+                    Debug.Log($"💢 Dealing {damage} damage to {tank.name} (via parent)");
+                    tankController.TakeDamage(damage);
+                }
+            }
+        }
+        
+        // Всегда уничтожаем пулю при столкновении с танком
         DestroyBullet();
-        Debug.Log("🎯 Bullet hit tank");
     }
     
     private void HandleBulletCollision()
